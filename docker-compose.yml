@@ -3,21 +3,36 @@ services:
     build: .
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/mydb
+    env_file:
+      - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=mydb
+    env_file:
+      - .env
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  k6:
+    image: grafana/k6
+    volumes:
+      - ./benchmarks:/benchmarks
+    command: run /benchmarks/run.js
+    depends_on:
+      - api
+    environment:
+      - K6_NO_USAGE_REPORT=true
+    entrypoint: ["sh", "-c", "sleep 5 && k6 run /benchmarks/run.js"]
 
 volumes:
   postgres_data:
